@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_tensor_index(t1 *testing.T) {
@@ -11,35 +12,35 @@ func Test_tensor_index(t1 *testing.T) {
 	}
 	type testCase struct {
 		name string
-		t    tensor[float32]
+		t    tensor
 		args args
-		want tensor[float32]
+		want tensor
 	}
 	tests := []testCase{
 		{
 			name: "",
-			t: tensor[float32]{
+			t: tensor{
 				data: []float32{1, 2, 3, 4},
 				dims: []int{2, 2},
 			},
 			args: args{
 				idx: []int{1},
 			},
-			want: tensor[float32]{
+			want: tensor{
 				data: []float32{3, 4},
 				dims: []int{2},
 			},
 		},
 		{
 			name: "",
-			t: tensor[float32]{
+			t: tensor{
 				data: []float32{1, 2, 3, 4},
 				dims: []int{2, 2},
 			},
 			args: args{
 				idx: []int{0},
 			},
-			want: tensor[float32]{
+			want: tensor{
 				data: []float32{1, 2},
 				dims: []int{2},
 			},
@@ -66,7 +67,6 @@ func TestParameterTensors_init(t *testing.T) {
 		want ParameterTensors
 	}{
 		{
-			name: "",
 			args: args{
 				vocabSize: 1,
 				channels:  1,
@@ -74,31 +74,32 @@ func TestParameterTensors_init(t *testing.T) {
 				numLayers: 1,
 			},
 			want: ParameterTensors{
-				WordTokEmbed:  tensor[float32]{data: []float32{0}, dims: []int{1, 1}},
-				WordPosEmbed:  tensor[float32]{data: []float32{1}, dims: []int{1, 1}},
-				Layer1NormW:   tensor[float32]{data: []float32{2}, dims: []int{1, 1}},
-				Layer1NormB:   tensor[float32]{data: []float32{3}, dims: []int{1, 1}},
-				QueryKeyValW:  tensor[float32]{data: []float32{4, 5, 6}, dims: []int{1, 3, 1}},
-				QueryKeyValB:  tensor[float32]{data: []float32{7, 8, 9}, dims: []int{1, 3}},
-				AttProjW:      tensor[float32]{data: []float32{10}, dims: []int{1, 1, 1}},
-				AttProjB:      tensor[float32]{data: []float32{11}, dims: []int{1, 1}},
-				Layer2NormW:   tensor[float32]{data: []float32{12}, dims: []int{1, 1}},
-				Layer2NormB:   tensor[float32]{data: []float32{13}, dims: []int{1, 1}},
-				FeedFwdW:      tensor[float32]{data: []float32{14, 15, 16, 17}, dims: []int{1, 4, 1}},
-				FeedFwdB:      tensor[float32]{data: []float32{18, 19, 20, 21}, dims: []int{1, 4}},
-				FeedFwdProjW:  tensor[float32]{data: []float32{22, 23, 24, 25}, dims: []int{1, 1, 4}},
-				FeedFwdProjB:  tensor[float32]{data: []float32{26}, dims: []int{1, 1}},
-				LayerFinNormW: tensor[float32]{data: []float32{27}, dims: []int{1}},
-				LayerFinNormB: tensor[float32]{data: []float32{28}, dims: []int{1}},
+				Memory:        []float32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28},
+				WordTokEmbed:  tensor{data: []float32{0}, dims: []int{1, 1}},
+				WordPosEmbed:  tensor{data: []float32{1}, dims: []int{1, 1}},
+				LayerNorm1W:   tensor{data: []float32{2}, dims: []int{1, 1}},
+				LayerNorm1B:   tensor{data: []float32{3}, dims: []int{1, 1}},
+				QueryKeyValW:  tensor{data: []float32{4, 5, 6}, dims: []int{1, 3, 1}},
+				QueryKeyValB:  tensor{data: []float32{7, 8, 9}, dims: []int{1, 3}},
+				AttProjW:      tensor{data: []float32{10}, dims: []int{1, 1, 1}},
+				AttProjB:      tensor{data: []float32{11}, dims: []int{1, 1}},
+				Layer2NormW:   tensor{data: []float32{12}, dims: []int{1, 1}},
+				Layer2NormB:   tensor{data: []float32{13}, dims: []int{1, 1}},
+				FeedFwdW:      tensor{data: []float32{14, 15, 16, 17}, dims: []int{1, 4, 1}},
+				FeedFwdB:      tensor{data: []float32{18, 19, 20, 21}, dims: []int{1, 4}},
+				FeedFwdProjW:  tensor{data: []float32{22, 23, 24, 25}, dims: []int{1, 1, 4}},
+				FeedFwdProjB:  tensor{data: []float32{26}, dims: []int{1, 1}},
+				LayerFinNormW: tensor{data: []float32{27}, dims: []int{1}},
+				LayerFinNormB: tensor{data: []float32{28}, dims: []int{1}},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tensor := ParameterTensors{}
-			got := tensor.init(tt.args.vocabSize, tt.args.channels, tt.args.maxSeqLen, tt.args.numLayers)
-			for i := range got {
-				got[i] = float32(i)
+			tensor.init(tt.args.vocabSize, tt.args.channels, tt.args.maxSeqLen, tt.args.numLayers)
+			for i := range tensor.Memory {
+				tensor.Memory[i] = float32(i)
 			}
 			assert.Equal(t, tt.want, tensor)
 		})
@@ -113,7 +114,7 @@ func Test_newTensor(t *testing.T) {
 	type testCase[T any] struct {
 		name  string
 		args  args[T]
-		want  tensor[T]
+		want  tensor
 		want1 int
 	}
 	tests := []testCase[float32]{

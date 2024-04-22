@@ -16,7 +16,6 @@ type DataLoader struct {
 	file            io.Reader
 	currentPosition int64
 	fileSize        int64
-	buffer          []byte // Assuming tokenized data is represented as int32
 	numBatches      int
 	data            []int32
 	dataAll         []int32

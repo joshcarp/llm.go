@@ -3,11 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDataLoader_NextBatch(t *testing.T) {
@@ -159,14 +160,4 @@ func TestDataLoader_NextBatch(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestWriteExampleFile(t *testing.T) {
-	file, err := os.Create("numbers2.bin")
-	require.NoError(t, err)
-	nums := make([]int32, 3)
-	for i := range nums {
-		nums[i] = int32(i)
-	}
-	require.NoError(t, binary.Write(file, binary.LittleEndian, nums))
 }
