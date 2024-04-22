@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	model, err := LoadGPT2Model("./data/gpt2_124M.bin")
+	model, err := LoadGPT2Model("./data/gpt2_124M.bin", "./data/gpt2_tokenizer.bin")
 	if err != nil {
 		log.Fatal(err)
 	}
