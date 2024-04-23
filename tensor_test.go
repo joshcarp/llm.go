@@ -97,7 +97,7 @@ func TestParameterTensors_init(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tensor := ParameterTensors{}
-			tensor.init(tt.args.vocabSize, tt.args.channels, tt.args.maxSeqLen, tt.args.numLayers)
+			tensor.Init(tt.args.vocabSize, tt.args.channels, tt.args.maxSeqLen, tt.args.numLayers)
 			for i := range tensor.Memory {
 				tensor.Memory[i] = float32(i)
 			}

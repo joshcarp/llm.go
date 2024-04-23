@@ -1,3 +1,9 @@
-data/
-checkpoint/
 .vscode/
+gpt2_tokenizer.bin
+gpt2_124M.bin
+gpt2_124M_debug_state.bin
+tiny_shakespeare.txt
+tiny_shakespeare2.txt
+tiny_shakespeare_train.bin
+tiny_shakespeare_val.bin
+data/

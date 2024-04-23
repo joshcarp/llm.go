@@ -31,10 +31,15 @@
 </div>
 <script>
     var inputField = document.querySelector('#inputField')
-    var outputHash = document.querySelector('#outputHash')
+    var outpu = document.querySelector('#outputHash')
     var sendButton = document.querySelector('#sendButton')
+    function enqueue(str) {
+        console.log(str);
+    }
+
     sendButton.addEventListener('click', function () {
-        outputHash.innerHTML = chat(inputField.value) // The function 'chat' is defined in the Go code
+        chat(window, [inputField.value], function(str) {
+        });
     });
 </script>
 </body>

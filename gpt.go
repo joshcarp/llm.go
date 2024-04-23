@@ -83,7 +83,7 @@ func loadFromReader(f io.Reader) (*GPT2, error) {
 			C:         int(header[6]),
 		},
 	}
-	model.Params.init(model.Config.V, model.Config.C, model.Config.MaxSeqLen, model.Config.L)
+	model.Params.Init(model.Config.V, model.Config.C, model.Config.MaxSeqLen, model.Config.L)
 	model.NumParameters = len(model.Params.Memory)
 	if err := binary.Read(f, binary.LittleEndian, model.Params.Memory); err != nil {
 		return nil, fmt.Errorf("error reading model: %v", err)
@@ -103,7 +103,7 @@ func (model *GPT2) String() string {
 	return s
 }
 
-func (model *GPT2) update(learningRate, beta1, beta2, eps, weightDecay float32, t int) {
+func (model *GPT2) Update(learningRate, beta1, beta2, eps, weightDecay float32, t int) {
 	// Lazy memory allocation
 	if model.MMemory == nil {
 		model.MMemory = make([]float32, model.NumParameters)
@@ -127,7 +127,7 @@ func (model *GPT2) update(learningRate, beta1, beta2, eps, weightDecay float32, 
 	}
 }
 
-func (model *GPT2) backward() error {
+func (model *GPT2) Backward() error {
 	//// double check we forwarded previously, with targets
 	if model.MeanLoss == -1.0 {
 		return errors.New("error: must forward with targets before backward")
@@ -136,10 +136,10 @@ func (model *GPT2) backward() error {
 	// convenience shortcuts
 	B, T, V, L, NH, C := model.B, model.T, model.Config.V, model.Config.L, model.Config.NH, model.Config.C
 	if len(model.Grads.Memory) == 0 {
-		model.Grads.init(V, C, model.Config.MaxSeqLen, L)
-		model.GradsActs.init(B, C, T, L, NH, V)
+		model.Grads.Init(V, C, model.Config.MaxSeqLen, L)
+		model.GradsActs.Init(B, C, T, L, NH, V)
 		model.NumActivations = len(model.GradsActs.Memory)
-		model.zeroGradient()
+		model.ZeroGradient()
 	}
 	// backward pass
 	params, grads, acts, gradsActs := model.Params, model.Grads, model.Acts, model.GradsActs
@@ -240,7 +240,7 @@ func (model *GPT2) Inference(input string) (string, error) {
 		}
 	}
 	fmt.Printf("input is %d tokens long\n", len(tokens))
-	model.forward(tokens, tokens[1:], B, T)
+	model.Forward(tokens, tokens[1:], B, T)
 	genTokens := make([]int32, B*T)
 	const genMaxLength = 16
 	genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
@@ -252,7 +252,7 @@ func (model *GPT2) Inference(input string) (string, error) {
 		// for each t, we re-compute all activations between 0 and t
 		// leaving this alone because you want separate code for inference anyway
 		// the inference here is just for sanity checking purposes
-		model.forward(genTokens, nil, B, t)
+		model.Forward(genTokens, nil, B, t)
 		probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
 		coin := rand.Float32()
 		nextToken2 := sampleMult(probabilities, coin)
@@ -264,7 +264,7 @@ func (model *GPT2) Inference(input string) (string, error) {
 	return "", errors.New("tokenizer not initialised")
 }
 
-func (model *GPT2) Forward(valDataloader, trainDataloader *DataLoader, B, T int) error {
+func (model *GPT2) Train(valDataloader, trainDataloader *DataLoader, B, T int) error {
 	fmt.Printf("train dataset num_batches: %d\n", valDataloader.NumBatches)
 	const genMaxLength, valNumBatches = 64, 10
 	genTokens := make([]int32, B*T)
@@ -277,7 +277,7 @@ func (model *GPT2) Forward(valDataloader, trainDataloader *DataLoader, B, T int)
 				if err != nil {
 					return err
 				}
-				model.forward(input, target, B, T)
+				model.Forward(input, target, B, T)
 				valLoss += model.MeanLoss
 			}
 			valLoss /= float32(valNumBatches)
@@ -292,7 +292,7 @@ func (model *GPT2) Forward(valDataloader, trainDataloader *DataLoader, B, T int)
 				// for each t, we re-compute all activations between 0 and t
 				// leaving this alone because you want separate code for inference anyway
 				// the inference here is just for sanity checking purposes
-				model.forward(genTokens, nil, B, t)
+				model.Forward(genTokens, nil, B, t)
 				probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
 				coin := rand.Float32()
 				nextToken2 := sampleMult(probabilities, coin)
@@ -323,16 +323,16 @@ func (model *GPT2) Forward(valDataloader, trainDataloader *DataLoader, B, T int)
 		if err != nil {
 			return err
 		}
-		model.forward(input, targets, B, T)
-		model.zeroGradient()
-		model.backward()
-		model.update(1e-4, 0.9, 0.999, 1e-8, 0.0, step+1)
+		model.Forward(input, targets, B, T)
+		model.ZeroGradient()
+		model.Backward()
+		model.Update(1e-4, 0.9, 0.999, 1e-8, 0.0, step+1)
 		fmt.Printf("step %d: train loss %f (took %v ms)\n", step, model.MeanLoss, time.Since(start))
 	}
 	return nil
 }
 
-func (model *GPT2) zeroGradient() {
+func (model *GPT2) ZeroGradient() {
 	for i := range model.GradsActs.Memory {
 		model.GradsActs.Memory[i] = 0.0
 	}
@@ -341,11 +341,11 @@ func (model *GPT2) zeroGradient() {
 	}
 }
 
-func (model *GPT2) forward(input, target []int32, B, T int) {
+func (model *GPT2) Forward(input, target []int32, B, T int) {
 	V, L, NH, C := model.Config.V, model.Config.L, model.Config.NH, model.Config.C
 	if model.Acts.Memory == nil {
 		model.B, model.T = B, T
-		model.Acts.init(B, C, T, L, NH, V)
+		model.Acts.Init(B, C, T, L, NH, V)
 		model.Inputs = make([]int32, B*T)
 		model.Targets = make([]int32, B*T)
 	}
