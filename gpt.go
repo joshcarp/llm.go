@@ -9,7 +9,9 @@ import (
 	"time"
 )
 
-const GPT2_EOT = 50256
+const (
+	GPT2_EOT int32 = 50256
+)
 
 type GPT2Config struct {
 	MaxSeqLen int `json:"max_seq_len"`
@@ -17,6 +19,7 @@ type GPT2Config struct {
 	L         int `json:"num_layers"`
 	NH        int `json:"num_heads"`
 	C         int `json:"channels"`
+	EOT       int32
 }
 
 type GPT2 struct {
@@ -25,20 +28,19 @@ type GPT2 struct {
 	// Params has the actual weights of the model. Params.Memory is for convenience to be able to set/reset parameters simply
 	Params ParameterTensors // Weights of the model
 	// Grads contains the delta/gradient that will eventually be applied to the params in the model
-	Grads         ParameterTensors // Gradients of the weights
-	NumParameters int              // Total number of parameters
+	Grads ParameterTensors // Gradients of the weights
 	// Fields for AdamW optimizer
 	MMemory []float32         // First moment estimates (for AdamW)
 	VMemory []float32         // Second moment estimates (for AdamW)
 	Acts    ActivationTensors // Activations of the model
 	// gradients of the activations
-	GradsActs      ActivationTensors
-	NumActivations int
-	B              int     // Current batch size (B)
-	T              int     // Current sequence length (T)
-	Inputs         []int32 // Input tokens
-	Targets        []int32 // Target tokens
-	MeanLoss       float32 // Mean loss after a forward pass
+	GradsActs ActivationTensors
+	B         int     // Current batch size (B)
+	T         int     // Current sequence length (T)
+	Inputs    []int32 // Input tokens
+	Targets   []int32 // Target tokens
+	MeanLoss  float32 // Mean loss after a forward pass
+	Rand      *rand.Rand
 }
 
 // LoadGPT2Model loads the GPT-2 model from a checkpoint file.
@@ -65,6 +67,22 @@ func LoadGPT2Model(checkpointPath, tokenizerFile string) (*GPT2, error) {
 	return model, nil
 }
 
+func newGPT2(MaxSeqLen, V, L, NH, C int, vocab []string) GPT2 {
+	model := GPT2{
+		Config: GPT2Config{
+			MaxSeqLen: MaxSeqLen,
+			V:         V,
+			L:         L,
+			NH:        NH,
+			C:         C,
+		},
+		Params:    newParameterTensors(V, C, MaxSeqLen, L),
+		Tokenizer: newTokenizer(vocab),
+		Rand:      rand.New(rand.NewSource(21)),
+	}
+	return model
+}
+
 func loadFromReader(f io.Reader) (*GPT2, error) {
 	header := make([]int32, 256)
 	err := binary.Read(f, binary.LittleEndian, header)
@@ -81,10 +99,11 @@ func loadFromReader(f io.Reader) (*GPT2, error) {
 			L:         int(header[4]),
 			NH:        int(header[5]),
 			C:         int(header[6]),
+			EOT:       GPT2_EOT,
 		},
+		Rand: rand.New(rand.NewSource(21)),
 	}
 	model.Params.Init(model.Config.V, model.Config.C, model.Config.MaxSeqLen, model.Config.L)
-	model.NumParameters = len(model.Params.Memory)
 	if err := binary.Read(f, binary.LittleEndian, model.Params.Memory); err != nil {
 		return nil, fmt.Errorf("error reading model: %v", err)
 	}
@@ -99,7 +118,7 @@ func (model *GPT2) String() string {
 	s += fmt.Sprintf("num_layers: %d\n", model.Config.L)
 	s += fmt.Sprintf("num_heads: %d\n", model.Config.NH)
 	s += fmt.Sprintf("channels: %d\n", model.Config.C)
-	s += fmt.Sprintf("num_parameters: %d\n", model.NumParameters)
+	s += fmt.Sprintf("num_parameters: %d\n", len(model.Params.Memory))
 	return s
 }
 
@@ -264,7 +283,6 @@ func (model *GPT2) Backward() error {
 	if len(model.Grads.Memory) == 0 {
 		model.Grads.Init(V, C, model.Config.MaxSeqLen, L)
 		model.GradsActs.Init(B, C, T, L, NH, V)
-		model.NumActivations = len(model.GradsActs.Memory)
 		model.ZeroGradient()
 	}
 	// backward pass
@@ -353,11 +371,11 @@ func (model *GPT2) Backward() error {
 func (model *GPT2) Update(learningRate, beta1, beta2, eps, weightDecay float32, t int) {
 	// Lazy memory allocation
 	if model.MMemory == nil {
-		model.MMemory = make([]float32, model.NumParameters)
-		model.VMemory = make([]float32, model.NumParameters)
+		model.MMemory = make([]float32, model.Params.Len())
+		model.VMemory = make([]float32, model.Params.Len())
 	}
 	// Parameter updates
-	for i := 0; i < model.NumParameters; i++ {
+	for i := 0; i < model.Params.Len(); i++ {
 		parameter := model.Params.Memory[i]
 		gradient := model.Grads.Memory[i]
 		// Momentum update
@@ -374,8 +392,8 @@ func (model *GPT2) Update(learningRate, beta1, beta2, eps, weightDecay float32, 
 	}
 }
 
-func (model *GPT2) Inference(input string) (string, error) {
-	B, T := 1, 16
+func (model *GPT2) Inference(input string, B, T int) (string, error) {
+	//B, T := 1, 16
 	start := time.Now()
 	defer func() {
 		fmt.Printf("inference time took: %v\n", time.Now().Sub(start))
@@ -386,25 +404,23 @@ func (model *GPT2) Inference(input string) (string, error) {
 	}
 	if len(tokens) < T {
 		for i := len(tokens); i <= T; i++ {
-			tokens = append(tokens, GPT2_EOT)
+			tokens = append(tokens, model.Config.EOT)
 		}
 	}
 	fmt.Printf("input is %d tokens long\n", len(tokens))
 	model.Forward(tokens, tokens[1:], B, T)
-	genTokens := make([]int32, B*T)
-	const genMaxLength = 16
-	genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
+	genTokens := make([]int32, model.Config.MaxSeqLen)
 	for i := 0; i < B*T; i++ {
-		genTokens[i] = GPT2_EOT
+		genTokens[i] = model.Config.EOT
 	}
-	for t := 1; t < genMaxLength; t++ {
+	for t := 1; t < model.Config.MaxSeqLen; t++ {
 		fmt.Printf("generating token: %d\n", t)
 		// for each t, we re-compute all activations between 0 and t
 		// leaving this alone because you want separate code for inference anyway
 		// the inference here is just for sanity checking purposes
 		model.Forward(genTokens, nil, B, t)
 		probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
-		coin := rand.Float32()
+		coin := model.Rand.Float32()
 		nextToken2 := sampleMult(probabilities, coin)
 		genTokens[t] = rune(nextToken2)
 	}
@@ -433,12 +449,11 @@ func (model *GPT2) Train(valDataloader, trainDataloader *DataLoader, B, T int) e
 			valLoss /= float32(valNumBatches)
 			fmt.Printf("val loss %f\n", valLoss)
 		}
-		if true || step > 0 && step%20 == 0 {
+		if step > 0 && step%20 == 0 {
 			for i := 0; i < B*T; i++ {
-				genTokens[i] = GPT2_EOT
+				genTokens[i] = model.Config.EOT
 			}
-			genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
-			for t := 1; t < genMaxLength; t++ {
+			for t := 1; t < len(genTokens); t++ {
 				// for each t, we re-compute all activations between 0 and t
 				// leaving this alone because you want separate code for inference anyway
 				// the inference here is just for sanity checking purposes

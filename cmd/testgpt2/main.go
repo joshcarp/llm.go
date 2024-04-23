@@ -54,7 +54,7 @@ func main() {
 	fmt.Printf("[State]\n")
 	fmt.Printf("batch_size: %d\n", B)
 	fmt.Printf("seq_len: %d\n", T)
-	fmt.Printf("num_activations: %d\n", model.NumActivations)
+	fmt.Printf("num_activations: %d\n", len(model.Acts.Memory))
 	allok := true
 	var losses []float32
 	for step := 0; step < 10; step++ {
