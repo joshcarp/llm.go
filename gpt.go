@@ -1,4 +1,4 @@
-package main
+package llmgo
 
 import (
 	"encoding/binary"
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"os"
 	"time"
 )
 
@@ -45,7 +44,7 @@ type GPT2 struct {
 // LoadGPT2Model loads the GPT-2 model from a checkpoint file.
 func LoadGPT2Model(checkpointPath, tokenizerFile string) (*GPT2, error) {
 	// File Reading
-	f, err := os.Open(checkpointPath)
+	f, err := Open(checkpointPath)
 	if err != nil {
 		return nil, fmt.Errorf("Error opening model file: %v", err)
 	}
@@ -225,8 +224,48 @@ func (model *GPT2) backward() error {
 	return nil
 }
 
-func (model *GPT2) train(valDataloader, trainDataloader *DataLoader, B, T int) error {
-	fmt.Printf("train dataset num_batches: %d\n", valDataloader.numBatches)
+func (model *GPT2) Inference(input string) (string, error) {
+	B, T := 1, 16
+	start := time.Now()
+	defer func() {
+		fmt.Printf("inference time took: %v\n", time.Now().Sub(start))
+	}()
+	tokens, err := model.Tokenizer.Encode(input)
+	if err != nil {
+		return "", err
+	}
+	if len(tokens) < T {
+		for i := len(tokens); i <= T; i++ {
+			tokens = append(tokens, GPT2_EOT)
+		}
+	}
+	fmt.Printf("input is %d tokens long\n", len(tokens))
+	model.forward(tokens, tokens[1:], B, T)
+	genTokens := make([]int32, B*T)
+	const genMaxLength = 16
+	genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
+	for i := 0; i < B*T; i++ {
+		genTokens[i] = GPT2_EOT
+	}
+	for t := 1; t < genMaxLength; t++ {
+		fmt.Printf("generating token: %d\n", t)
+		// for each t, we re-compute all activations between 0 and t
+		// leaving this alone because you want separate code for inference anyway
+		// the inference here is just for sanity checking purposes
+		model.forward(genTokens, nil, B, t)
+		probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
+		coin := rand.Float32()
+		nextToken2 := sampleMult(probabilities, coin)
+		genTokens[t] = rune(nextToken2)
+	}
+	if model.Tokenizer.init {
+		return model.Tokenizer.Decode(genTokens)
+	}
+	return "", errors.New("tokenizer not initialised")
+}
+
+func (model *GPT2) Forward(valDataloader, trainDataloader *DataLoader, B, T int) error {
+	fmt.Printf("train dataset num_batches: %d\n", valDataloader.NumBatches)
 	const genMaxLength, valNumBatches = 64, 10
 	genTokens := make([]int32, B*T)
 	for step := 0; step <= 40; step++ {
@@ -244,7 +283,7 @@ func (model *GPT2) train(valDataloader, trainDataloader *DataLoader, B, T int) e
 			valLoss /= float32(valNumBatches)
 			fmt.Printf("val loss %f\n", valLoss)
 		}
-		if step > 0 && step%20 == 0 {
+		if true || step > 0 && step%20 == 0 {
 			for i := 0; i < B*T; i++ {
 				genTokens[i] = GPT2_EOT
 			}
@@ -309,14 +348,6 @@ func (model *GPT2) forward(input, target []int32, B, T int) {
 		model.Acts.init(B, C, T, L, NH, V)
 		model.Inputs = make([]int32, B*T)
 		model.Targets = make([]int32, B*T)
-	} else {
-		// validate B,T is no larger than what was previously allocated
-		// in principle, we could re-allocate a larger chunk of memory, for now we just error out
-		if B != model.B || T != model.T {
-			fmt.Printf("Error: batch size or sequence length is inadequately large\n")
-			fmt.Printf("Model: B=%d T=%d, Desired: B=%d T=%d\n", model.B, model.T, B, T)
-			return
-		}
 	}
 	copy(model.Inputs, input)
 	copy(model.Targets, target)

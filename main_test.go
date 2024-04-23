@@ -1,9 +1,8 @@
-package main
+package llmgo
 
 import (
 	"encoding/binary"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 )
@@ -14,7 +13,7 @@ func TestGPT(t *testing.T) {
 		t.Error(err)
 	}
 	V := model.Config.V
-	stateFile, err := os.Open("./data/gpt2_124M_debug_state.bin")
+	stateFile, err := Open("./data/gpt2_124M_debug_state.bin")
 	if err != nil {
 		t.Error(err)
 	}

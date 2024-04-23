@@ -1,4 +1,4 @@
-package main
+package llmgo
 
 func sampleMult(probabilities []float32, coin float32) int {
 	var cdf float32
