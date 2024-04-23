@@ -103,244 +103,6 @@ func (model *GPT2) String() string {
 	return s
 }
 
-func (model *GPT2) Update(learningRate, beta1, beta2, eps, weightDecay float32, t int) {
-	// Lazy memory allocation
-	if model.MMemory == nil {
-		model.MMemory = make([]float32, model.NumParameters)
-		model.VMemory = make([]float32, model.NumParameters)
-	}
-	// Parameter updates
-	for i := 0; i < model.NumParameters; i++ {
-		parameter := model.Params.Memory[i]
-		gradient := model.Grads.Memory[i]
-		// Momentum update
-		m := beta1*model.MMemory[i] + (1.0-beta1)*gradient
-		// RMSprop update
-		v := beta2*model.VMemory[i] + (1.0-beta2)*gradient*gradient
-		// Bias correction
-		mHat := m / (1.0 - Pow(beta1, float32(t)))
-		vHat := v / (1.0 - Pow(beta2, float32(t)))
-		// Parameter update
-		model.MMemory[i] = m
-		model.VMemory[i] = v
-		model.Params.Memory[i] -= learningRate * (mHat/(Sqrt(vHat)+eps) + weightDecay*parameter)
-	}
-}
-
-func (model *GPT2) Backward() error {
-	//// double check we forwarded previously, with targets
-	if model.MeanLoss == -1.0 {
-		return errors.New("error: must forward with targets before backward")
-	}
-	// lazily allocate the memory for gradients of the weights and activations, if needed
-	// convenience shortcuts
-	B, T, V, L, NH, C := model.B, model.T, model.Config.V, model.Config.L, model.Config.NH, model.Config.C
-	if len(model.Grads.Memory) == 0 {
-		model.Grads.Init(V, C, model.Config.MaxSeqLen, L)
-		model.GradsActs.Init(B, C, T, L, NH, V)
-		model.NumActivations = len(model.GradsActs.Memory)
-		model.ZeroGradient()
-	}
-	// backward pass
-	params, grads, acts, gradsActs := model.Params, model.Grads, model.Acts, model.GradsActs
-	// we kick off the chain by filling in dlosses with 1.0f/(B*T), to get the mean loss
-	dlossMean := 1.0 / float32(B*T)
-	for i := range gradsActs.Losses.data {
-		gradsActs.Losses.data[i] = dlossMean
-	}
-	crossentropySoftmaxBackward(gradsActs.Logits.data, gradsActs.Losses.data, acts.Probabilities.data, model.Targets, B, T, V)
-	matmulBackward(gradsActs.LayerNormFinal.data, grads.WordTokEmbed.data, nil, gradsActs.Logits.data, acts.LayerNormFinal.data, params.WordTokEmbed.data, B, T, C, V)
-	residual := acts.Residual3.data[(L-1)*B*T*C:]       // last layer's residual
-	dresidual := gradsActs.Residual3.data[(L-1)*B*T*C:] // write to last layer's residual
-	layernormBackward(dresidual, grads.LayerFinNormW.data, grads.LayerFinNormB.data, gradsActs.LayerNormFinal.data, residual, params.LayerFinNormW.data, acts.LayerNormFinalMean.data, acts.LayerNormFinalStd.data, B, T, C)
-	for l := L - 1; l >= 0; l-- {
-		if l == 0 {
-			residual = acts.Encoded.data
-			dresidual = gradsActs.Encoded.data
-		} else {
-			residual = acts.Residual3.data[(l-1)*B*T*C:]
-			dresidual = gradsActs.Residual3.data[(l-1)*B*T*C:]
-		}
-
-		// Assuming you have a 'params' variable of your ParameterTensors type
-		l_ln1w := params.LayerNorm1W.data[l*C:]
-		l_qkvw := params.QueryKeyValW.data[l*3*C*C:]
-		l_attprojw := params.AttProjW.data[l*C*C:]
-		l_ln2w := params.Layer2NormW.data[l*C:]
-		l_fcw := params.FeedFwdW.data[l*4*C*C:]
-		l_fcprojw := params.FeedFwdProjW.data[l*C*4*C:]
-		// Gradients of weights
-		dl_ln1w := grads.LayerNorm1W.data[l*C:]
-		dl_ln1b := grads.LayerNorm1B.data[l*C:]
-		dl_qkvw := grads.QueryKeyValW.data[l*3*C*C:]
-		dl_qkvb := grads.QueryKeyValB.data[l*3*C:]
-		dl_attprojw := grads.AttProjW.data[l*C*C:]
-		dl_attprojb := grads.AttProjB.data[l*C:]
-		dl_ln2w := grads.Layer2NormW.data[l*C:]
-		dl_ln2b := grads.Layer2NormB.data[l*C:]
-		dl_fcw := grads.FeedFwdW.data[l*4*C*C:]
-		dl_fcb := grads.FeedFwdB.data[l*4*C:]
-		dl_fcprojw := grads.FeedFwdProjW.data[l*C*4*C:]
-		dl_fcprojb := grads.FeedFwdProjB.data[l*C:]
-		// Activations
-		l_ln1 := acts.Layer1Act.data[l*B*T*C:]
-		l_ln1_mean := acts.LayerNorm1Mean.data[l*B*T:]
-		l_ln1_rstd := acts.LayerNorm1Rstd.data[l*B*T:]
-		l_qkv := acts.QueryKeyVal.data[l*B*T*3*C:]
-		l_atty := acts.AttentionInter.data[l*B*T*C:]
-		l_att := acts.Attention.data[l*B*NH*T*T:]
-		l_residual2 := acts.Residual2.data[l*B*T*C:]
-		l_ln2 := acts.LayerNorm2Act.data[l*B*T*C:]
-		l_ln2_mean := acts.LayerNorm2Mean.data[l*B*T:]
-		l_ln2_rstd := acts.LayerNorm2Rstd.data[l*B*T:]
-		l_fch := acts.FeedForward.data[l*B*T*4*C:]
-		l_fch_gelu := acts.FeedForwardGelu.data[l*B*T*4*C:]
-
-		dl_ln1 := gradsActs.Layer1Act.data[l*B*T*C:]
-		dl_qkv := gradsActs.QueryKeyVal.data[l*B*T*3*C:]
-		dl_atty := gradsActs.AttentionInter.data[l*B*T*C:]
-		dl_preatt := gradsActs.PreAttention.data[l*B*NH*T*T:]
-		dl_att := gradsActs.Attention.data[l*B*NH*T*T:]
-		dl_attproj := gradsActs.AttentionProj.data[l*B*T*C:]
-		dl_residual2 := gradsActs.Residual2.data[l*B*T*C:]
-		dl_ln2 := gradsActs.LayerNorm2Act.data[l*B*T*C:]
-		dl_fch := gradsActs.FeedForward.data[l*B*T*4*C:]
-		dl_fch_gelu := gradsActs.FeedForwardGelu.data[l*B*T*4*C:]
-		dl_fcproj := gradsActs.FeedForwardProj.data[l*B*T*C:]
-		dl_residual3 := gradsActs.Residual3.data[l*B*T*C:]
-		residualBackward(dl_residual2, dl_fcproj, dl_residual3, B*T*C)
-		matmulBackward(dl_fch_gelu, dl_fcprojw, dl_fcprojb, dl_fcproj, l_fch_gelu, l_fcprojw, B, T, 4*C, C)
-		geluBackward(dl_fch, l_fch, dl_fch_gelu, B*T*4*C)
-		matmulBackward(dl_ln2, dl_fcw, dl_fcb, dl_fch, l_ln2, l_fcw, B, T, C, 4*C)
-		layernormBackward(dl_residual2, dl_ln2w, dl_ln2b, dl_ln2, l_residual2, l_ln2w, l_ln2_mean, l_ln2_rstd, B, T, C)
-		residualBackward(dresidual, dl_attproj, dl_residual2, B*T*C)
-		matmulBackward(dl_atty, dl_attprojw, dl_attprojb, dl_attproj, l_atty, l_attprojw, B, T, C, C)
-		attentionBackward(dl_qkv, dl_preatt, dl_att, dl_atty, l_qkv, l_att, B, T, C, NH)
-		matmulBackward(dl_ln1, dl_qkvw, dl_qkvb, dl_qkv, l_ln1, l_qkvw, B, T, C, 3*C)
-		layernormBackward(dresidual, dl_ln1w, dl_ln1b, dl_ln1, residual, l_ln1w, l_ln1_mean, l_ln1_rstd, B, T, C)
-	}
-	// Here we want to apply our gradients to our encoded data.
-	encoderBackward(grads.WordTokEmbed.data, grads.WordPosEmbed.data, gradsActs.Encoded.data, model.Inputs, B, T, C)
-	return nil
-}
-
-func (model *GPT2) Inference(input string) (string, error) {
-	B, T := 1, 16
-	start := time.Now()
-	defer func() {
-		fmt.Printf("inference time took: %v\n", time.Now().Sub(start))
-	}()
-	tokens, err := model.Tokenizer.Encode(input)
-	if err != nil {
-		return "", err
-	}
-	if len(tokens) < T {
-		for i := len(tokens); i <= T; i++ {
-			tokens = append(tokens, GPT2_EOT)
-		}
-	}
-	fmt.Printf("input is %d tokens long\n", len(tokens))
-	model.Forward(tokens, tokens[1:], B, T)
-	genTokens := make([]int32, B*T)
-	const genMaxLength = 16
-	genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
-	for i := 0; i < B*T; i++ {
-		genTokens[i] = GPT2_EOT
-	}
-	for t := 1; t < genMaxLength; t++ {
-		fmt.Printf("generating token: %d\n", t)
-		// for each t, we re-compute all activations between 0 and t
-		// leaving this alone because you want separate code for inference anyway
-		// the inference here is just for sanity checking purposes
-		model.Forward(genTokens, nil, B, t)
-		probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
-		coin := rand.Float32()
-		nextToken2 := sampleMult(probabilities, coin)
-		genTokens[t] = rune(nextToken2)
-	}
-	if model.Tokenizer.init {
-		return model.Tokenizer.Decode(genTokens)
-	}
-	return "", errors.New("tokenizer not initialised")
-}
-
-func (model *GPT2) Train(valDataloader, trainDataloader *DataLoader, B, T int) error {
-	fmt.Printf("train dataset num_batches: %d\n", valDataloader.NumBatches)
-	const genMaxLength, valNumBatches = 64, 10
-	genTokens := make([]int32, B*T)
-	for step := 0; step <= 40; step++ {
-		if step%10 == 0 {
-			var valLoss float32
-			valDataloader.Reset()
-			for i := 0; i < valNumBatches; i++ {
-				input, target, err := valDataloader.NextBatch()
-				if err != nil {
-					return err
-				}
-				model.Forward(input, target, B, T)
-				valLoss += model.MeanLoss
-			}
-			valLoss /= float32(valNumBatches)
-			fmt.Printf("val loss %f\n", valLoss)
-		}
-		if true || step > 0 && step%20 == 0 {
-			for i := 0; i < B*T; i++ {
-				genTokens[i] = GPT2_EOT
-			}
-			genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
-			for t := 1; t < genMaxLength; t++ {
-				// for each t, we re-compute all activations between 0 and t
-				// leaving this alone because you want separate code for inference anyway
-				// the inference here is just for sanity checking purposes
-				model.Forward(genTokens, nil, B, t)
-				probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
-				coin := rand.Float32()
-				nextToken2 := sampleMult(probabilities, coin)
-				genTokens[t] = rune(nextToken2)
-			}
-			fmt.Print("generated: ")
-			if model.Tokenizer.init {
-				str, err := model.Tokenizer.Decode(genTokens)
-				if err != nil {
-					return err
-				}
-				fmt.Println(str)
-			} else {
-				fmt.Println(genTokens)
-			}
-			for t := 0; t < genMaxLength; t++ {
-				if model.Tokenizer.init {
-
-				} else {
-					fmt.Printf("%d ", genTokens[t])
-				}
-			}
-			fmt.Println()
-		}
-		// do a training step
-		start := time.Now()
-		input, targets, err := trainDataloader.NextBatch()
-		if err != nil {
-			return err
-		}
-		model.Forward(input, targets, B, T)
-		model.ZeroGradient()
-		model.Backward()
-		model.Update(1e-4, 0.9, 0.999, 1e-8, 0.0, step+1)
-		fmt.Printf("step %d: train loss %f (took %v ms)\n", step, model.MeanLoss, time.Since(start))
-	}
-	return nil
-}
-
-func (model *GPT2) ZeroGradient() {
-	for i := range model.GradsActs.Memory {
-		model.GradsActs.Memory[i] = 0.0
-	}
-	for i := range model.Grads.Memory {
-		model.Grads.Memory[i] = 0.0
-	}
-}
-
 func (model *GPT2) Forward(input, target []int32, B, T int) {
 	V, L, NH, C := model.Config.V, model.Config.L, model.Config.NH, model.Config.C
 	if model.Acts.Memory == nil {
@@ -488,5 +250,243 @@ func (model *GPT2) Forward(input, target []int32, B, T int) {
 
 	} else {
 		model.MeanLoss = -1.0
+	}
+}
+
+func (model *GPT2) Backward() error {
+	//// double check we forwarded previously, with targets
+	if model.MeanLoss == -1.0 {
+		return errors.New("error: must forward with targets before backward")
+	}
+	// lazily allocate the memory for gradients of the weights and activations, if needed
+	// convenience shortcuts
+	B, T, V, L, NH, C := model.B, model.T, model.Config.V, model.Config.L, model.Config.NH, model.Config.C
+	if len(model.Grads.Memory) == 0 {
+		model.Grads.Init(V, C, model.Config.MaxSeqLen, L)
+		model.GradsActs.Init(B, C, T, L, NH, V)
+		model.NumActivations = len(model.GradsActs.Memory)
+		model.ZeroGradient()
+	}
+	// backward pass
+	params, grads, acts, gradsActs := model.Params, model.Grads, model.Acts, model.GradsActs
+	// we kick off the chain by filling in dlosses with 1.0f/(B*T), to get the mean loss
+	dlossMean := 1.0 / float32(B*T)
+	for i := range gradsActs.Losses.data {
+		gradsActs.Losses.data[i] = dlossMean
+	}
+	crossentropySoftmaxBackward(gradsActs.Logits.data, gradsActs.Losses.data, acts.Probabilities.data, model.Targets, B, T, V)
+	matmulBackward(gradsActs.LayerNormFinal.data, grads.WordTokEmbed.data, nil, gradsActs.Logits.data, acts.LayerNormFinal.data, params.WordTokEmbed.data, B, T, C, V)
+	residual := acts.Residual3.data[(L-1)*B*T*C:]       // last layer's residual
+	dresidual := gradsActs.Residual3.data[(L-1)*B*T*C:] // write to last layer's residual
+	layernormBackward(dresidual, grads.LayerFinNormW.data, grads.LayerFinNormB.data, gradsActs.LayerNormFinal.data, residual, params.LayerFinNormW.data, acts.LayerNormFinalMean.data, acts.LayerNormFinalStd.data, B, T, C)
+	for l := L - 1; l >= 0; l-- {
+		if l == 0 {
+			residual = acts.Encoded.data
+			dresidual = gradsActs.Encoded.data
+		} else {
+			residual = acts.Residual3.data[(l-1)*B*T*C:]
+			dresidual = gradsActs.Residual3.data[(l-1)*B*T*C:]
+		}
+
+		// Assuming you have a 'params' variable of your ParameterTensors type
+		l_ln1w := params.LayerNorm1W.data[l*C:]
+		l_qkvw := params.QueryKeyValW.data[l*3*C*C:]
+		l_attprojw := params.AttProjW.data[l*C*C:]
+		l_ln2w := params.Layer2NormW.data[l*C:]
+		l_fcw := params.FeedFwdW.data[l*4*C*C:]
+		l_fcprojw := params.FeedFwdProjW.data[l*C*4*C:]
+		// Gradients of weights
+		dl_ln1w := grads.LayerNorm1W.data[l*C:]
+		dl_ln1b := grads.LayerNorm1B.data[l*C:]
+		dl_qkvw := grads.QueryKeyValW.data[l*3*C*C:]
+		dl_qkvb := grads.QueryKeyValB.data[l*3*C:]
+		dl_attprojw := grads.AttProjW.data[l*C*C:]
+		dl_attprojb := grads.AttProjB.data[l*C:]
+		dl_ln2w := grads.Layer2NormW.data[l*C:]
+		dl_ln2b := grads.Layer2NormB.data[l*C:]
+		dl_fcw := grads.FeedFwdW.data[l*4*C*C:]
+		dl_fcb := grads.FeedFwdB.data[l*4*C:]
+		dl_fcprojw := grads.FeedFwdProjW.data[l*C*4*C:]
+		dl_fcprojb := grads.FeedFwdProjB.data[l*C:]
+		// Activations
+		l_ln1 := acts.Layer1Act.data[l*B*T*C:]
+		l_ln1_mean := acts.LayerNorm1Mean.data[l*B*T:]
+		l_ln1_rstd := acts.LayerNorm1Rstd.data[l*B*T:]
+		l_qkv := acts.QueryKeyVal.data[l*B*T*3*C:]
+		l_atty := acts.AttentionInter.data[l*B*T*C:]
+		l_att := acts.Attention.data[l*B*NH*T*T:]
+		l_residual2 := acts.Residual2.data[l*B*T*C:]
+		l_ln2 := acts.LayerNorm2Act.data[l*B*T*C:]
+		l_ln2_mean := acts.LayerNorm2Mean.data[l*B*T:]
+		l_ln2_rstd := acts.LayerNorm2Rstd.data[l*B*T:]
+		l_fch := acts.FeedForward.data[l*B*T*4*C:]
+		l_fch_gelu := acts.FeedForwardGelu.data[l*B*T*4*C:]
+
+		dl_ln1 := gradsActs.Layer1Act.data[l*B*T*C:]
+		dl_qkv := gradsActs.QueryKeyVal.data[l*B*T*3*C:]
+		dl_atty := gradsActs.AttentionInter.data[l*B*T*C:]
+		dl_preatt := gradsActs.PreAttention.data[l*B*NH*T*T:]
+		dl_att := gradsActs.Attention.data[l*B*NH*T*T:]
+		dl_attproj := gradsActs.AttentionProj.data[l*B*T*C:]
+		dl_residual2 := gradsActs.Residual2.data[l*B*T*C:]
+		dl_ln2 := gradsActs.LayerNorm2Act.data[l*B*T*C:]
+		dl_fch := gradsActs.FeedForward.data[l*B*T*4*C:]
+		dl_fch_gelu := gradsActs.FeedForwardGelu.data[l*B*T*4*C:]
+		dl_fcproj := gradsActs.FeedForwardProj.data[l*B*T*C:]
+		dl_residual3 := gradsActs.Residual3.data[l*B*T*C:]
+		residualBackward(dl_residual2, dl_fcproj, dl_residual3, B*T*C)
+		matmulBackward(dl_fch_gelu, dl_fcprojw, dl_fcprojb, dl_fcproj, l_fch_gelu, l_fcprojw, B, T, 4*C, C)
+		geluBackward(dl_fch, l_fch, dl_fch_gelu, B*T*4*C)
+		matmulBackward(dl_ln2, dl_fcw, dl_fcb, dl_fch, l_ln2, l_fcw, B, T, C, 4*C)
+		layernormBackward(dl_residual2, dl_ln2w, dl_ln2b, dl_ln2, l_residual2, l_ln2w, l_ln2_mean, l_ln2_rstd, B, T, C)
+		residualBackward(dresidual, dl_attproj, dl_residual2, B*T*C)
+		matmulBackward(dl_atty, dl_attprojw, dl_attprojb, dl_attproj, l_atty, l_attprojw, B, T, C, C)
+		attentionBackward(dl_qkv, dl_preatt, dl_att, dl_atty, l_qkv, l_att, B, T, C, NH)
+		matmulBackward(dl_ln1, dl_qkvw, dl_qkvb, dl_qkv, l_ln1, l_qkvw, B, T, C, 3*C)
+		layernormBackward(dresidual, dl_ln1w, dl_ln1b, dl_ln1, residual, l_ln1w, l_ln1_mean, l_ln1_rstd, B, T, C)
+	}
+	// Here we want to apply our gradients to our encoded data.
+	encoderBackward(grads.WordTokEmbed.data, grads.WordPosEmbed.data, gradsActs.Encoded.data, model.Inputs, B, T, C)
+	return nil
+}
+
+func (model *GPT2) Update(learningRate, beta1, beta2, eps, weightDecay float32, t int) {
+	// Lazy memory allocation
+	if model.MMemory == nil {
+		model.MMemory = make([]float32, model.NumParameters)
+		model.VMemory = make([]float32, model.NumParameters)
+	}
+	// Parameter updates
+	for i := 0; i < model.NumParameters; i++ {
+		parameter := model.Params.Memory[i]
+		gradient := model.Grads.Memory[i]
+		// Momentum update
+		m := beta1*model.MMemory[i] + (1.0-beta1)*gradient
+		// RMSprop update
+		v := beta2*model.VMemory[i] + (1.0-beta2)*gradient*gradient
+		// Bias correction
+		mHat := m / (1.0 - Pow(beta1, float32(t)))
+		vHat := v / (1.0 - Pow(beta2, float32(t)))
+		// Parameter update
+		model.MMemory[i] = m
+		model.VMemory[i] = v
+		model.Params.Memory[i] -= learningRate * (mHat/(Sqrt(vHat)+eps) + weightDecay*parameter)
+	}
+}
+
+func (model *GPT2) Inference(input string) (string, error) {
+	B, T := 1, 16
+	start := time.Now()
+	defer func() {
+		fmt.Printf("inference time took: %v\n", time.Now().Sub(start))
+	}()
+	tokens, err := model.Tokenizer.Encode(input)
+	if err != nil {
+		return "", err
+	}
+	if len(tokens) < T {
+		for i := len(tokens); i <= T; i++ {
+			tokens = append(tokens, GPT2_EOT)
+		}
+	}
+	fmt.Printf("input is %d tokens long\n", len(tokens))
+	model.Forward(tokens, tokens[1:], B, T)
+	genTokens := make([]int32, B*T)
+	const genMaxLength = 16
+	genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
+	for i := 0; i < B*T; i++ {
+		genTokens[i] = GPT2_EOT
+	}
+	for t := 1; t < genMaxLength; t++ {
+		fmt.Printf("generating token: %d\n", t)
+		// for each t, we re-compute all activations between 0 and t
+		// leaving this alone because you want separate code for inference anyway
+		// the inference here is just for sanity checking purposes
+		model.Forward(genTokens, nil, B, t)
+		probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
+		coin := rand.Float32()
+		nextToken2 := sampleMult(probabilities, coin)
+		genTokens[t] = rune(nextToken2)
+	}
+	if model.Tokenizer.init {
+		return model.Tokenizer.Decode(genTokens)
+	}
+	return "", errors.New("tokenizer not initialised")
+}
+
+func (model *GPT2) Train(valDataloader, trainDataloader *DataLoader, B, T int) error {
+	fmt.Printf("train dataset num_batches: %d\n", valDataloader.NumBatches)
+	const genMaxLength, valNumBatches = 64, 10
+	genTokens := make([]int32, B*T)
+	for step := 0; step <= 40; step++ {
+		if step%10 == 0 {
+			var valLoss float32
+			valDataloader.Reset()
+			for i := 0; i < valNumBatches; i++ {
+				input, target, err := valDataloader.NextBatch()
+				if err != nil {
+					return err
+				}
+				model.Forward(input, target, B, T)
+				valLoss += model.MeanLoss
+			}
+			valLoss /= float32(valNumBatches)
+			fmt.Printf("val loss %f\n", valLoss)
+		}
+		if true || step > 0 && step%20 == 0 {
+			for i := 0; i < B*T; i++ {
+				genTokens[i] = GPT2_EOT
+			}
+			genTokens[0] = GPT2_EOT // the GPT-2 EOT token kicks off the generation
+			for t := 1; t < genMaxLength; t++ {
+				// for each t, we re-compute all activations between 0 and t
+				// leaving this alone because you want separate code for inference anyway
+				// the inference here is just for sanity checking purposes
+				model.Forward(genTokens, nil, B, t)
+				probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
+				coin := rand.Float32()
+				nextToken2 := sampleMult(probabilities, coin)
+				genTokens[t] = rune(nextToken2)
+			}
+			fmt.Print("generated: ")
+			if model.Tokenizer.init {
+				str, err := model.Tokenizer.Decode(genTokens)
+				if err != nil {
+					return err
+				}
+				fmt.Println(str)
+			} else {
+				fmt.Println(genTokens)
+			}
+			for t := 0; t < genMaxLength; t++ {
+				if model.Tokenizer.init {
+
+				} else {
+					fmt.Printf("%d ", genTokens[t])
+				}
+			}
+			fmt.Println()
+		}
+		// do a training step
+		start := time.Now()
+		input, targets, err := trainDataloader.NextBatch()
+		if err != nil {
+			return err
+		}
+		model.Forward(input, targets, B, T)
+		model.ZeroGradient()
+		model.Backward()
+		model.Update(1e-4, 0.9, 0.999, 1e-8, 0.0, step+1)
+		fmt.Printf("step %d: train loss %f (took %v ms)\n", step, model.MeanLoss, time.Since(start))
+	}
+	return nil
+}
+
+func (model *GPT2) ZeroGradient() {
+	for i := range model.GradsActs.Memory {
+		model.GradsActs.Memory[i] = 0.0
+	}
+	for i := range model.Grads.Memory {
+		model.Grads.Memory[i] = 0.0
 	}
 }
