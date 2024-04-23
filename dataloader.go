@@ -1,10 +1,10 @@
-package main
+package llmgo
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
-	"os"
 )
 
 const Int32ByteLen = 4
@@ -13,40 +13,53 @@ type DataLoader struct {
 	filename        string
 	batchSize       int
 	seqLength       int
-	file            io.Reader
 	currentPosition int64
 	fileSize        int64
-	numBatches      int
+	NumBatches      int
 	data            []int32
 	dataAll         []int32
 }
 
 func NewDataLoader(filename string, batchSize, seqLength int) (*DataLoader, error) {
-	file, err := os.Open(filename)
+	file, err := Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	return newDataLoader(file, batchSize, seqLength, int(fileInfo.Size()))
+	return newDataLoader(file, batchSize, seqLength)
 }
 
-func newDataLoader(file io.Reader, batchSize, seqLength, size int) (*DataLoader, error) {
+func newDataLoader(file io.Reader, batchSize, seqLength int) (*DataLoader, error) {
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	size := len(data)
 	if size < (batchSize*seqLength+1)*Int32ByteLen {
 		return nil, errors.New("error: file size is too small for the batch size and sequence length")
 	}
 	loader := &DataLoader{
 		batchSize:  batchSize,
 		seqLength:  seqLength,
-		file:       file,
-		numBatches: size / (batchSize * seqLength * Int32ByteLen),
+		NumBatches: size / (batchSize * seqLength * Int32ByteLen),
 		data:       make([]int32, size/Int32ByteLen),
 		fileSize:   int64(size / Int32ByteLen),
 	}
-	if err := binary.Read(loader.file, binary.LittleEndian, loader.data); err != nil {
+	if err := binary.Read(bytes.NewReader(data), binary.LittleEndian, loader.data); err != nil {
 		return nil, err
+	}
+	return loader, nil
+}
+func newDataLoaderFromInts(data []int32, batchSize, seqLength int) (*DataLoader, error) {
+	size := len(data)
+	if size < (batchSize*seqLength + 1) {
+		return nil, errors.New("error: file size is too small for the batch size and sequence length")
+	}
+	loader := &DataLoader{
+		batchSize:  batchSize,
+		seqLength:  seqLength,
+		NumBatches: size / (batchSize * seqLength),
+		data:       data,
+		fileSize:   int64(size),
 	}
 	return loader, nil
 }

@@ -1,4 +1,4 @@
-package main
+package llmgo
 
 import (
 	"bytes"
@@ -134,20 +134,18 @@ func TestDataLoader_NextBatch(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reader, size := newInt32Reader(tt.contents)
+			reader, _ := newInt32Reader(tt.contents)
 			if tt.filename != "" {
-				fileInfo, err := os.Stat(tt.filename)
+				_, err := os.Stat(tt.filename)
 				assert.NoError(t, err)
-				file, err := os.Open(tt.filename)
+				file, err := Open(tt.filename)
 				assert.NoError(t, err)
 				defer file.Close()
 				reader = file
-				size = int(fileInfo.Size())
-
 			}
-			loader, err := newDataLoader(reader, tt.batchSize, tt.seqLen, size)
+			loader, err := newDataLoader(reader, tt.batchSize, tt.seqLen)
 			assert.NoError(t, err)
-			assert.Equal(t, tt.wantNumBatches, loader.numBatches)
+			assert.Equal(t, tt.wantNumBatches, loader.NumBatches)
 			for _, want := range tt.want {
 				if want.reset {
 					loader.Reset()

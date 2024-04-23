@@ -1,4 +1,4 @@
-package main
+package llmgo
 
 type tensor struct {
 	data []float32
