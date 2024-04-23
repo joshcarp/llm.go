@@ -9,9 +9,7 @@ import (
 	"time"
 )
 
-const (
-	GPT2_EOT int32 = 50256
-)
+const GPT2_EOT int32 = 50256
 
 type GPT2Config struct {
 	MaxSeqLen int `json:"max_seq_len"`
