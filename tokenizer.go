@@ -3,18 +3,25 @@ package llmgo
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 )
 
 type Tokenizer struct {
-	vocabSize   uint32
-	tokenTable  []string
-	lookupTable map[string]int32
-	init        bool
+	vocabSize  uint32
+	tokenTable []string
+	trie       trie
+	init       bool
 }
 
+func newTokenizer(vocab []string) Tokenizer {
+	tokenizer := Tokenizer{
+		vocabSize:  uint32(len(vocab)),
+		tokenTable: vocab,
+		trie:       newTrie(vocab),
+		init:       true,
+	}
+	return tokenizer
+}
 func NewTokenizer(filename string) (Tokenizer, error) {
-	fmt.Println("NewTokenizer", filename)
 	f, err := Open(filename)
 	if err != nil {
 		return Tokenizer{}, err
@@ -28,10 +35,10 @@ func NewTokenizer(filename string) (Tokenizer, error) {
 		return Tokenizer{}, errors.New("incorrect header for tokenizer")
 	}
 	tok := Tokenizer{
-		vocabSize:   header[2],
-		tokenTable:  make([]string, header[2]),
-		lookupTable: make(map[string]int32, header[2]),
-		init:        true,
+		vocabSize:  header[2],
+		tokenTable: make([]string, header[2]),
+		init:       true,
+		trie:       newTrie(nil),
 	}
 	var length byte
 	for i := range tok.tokenTable {
@@ -46,7 +53,7 @@ func NewTokenizer(filename string) (Tokenizer, error) {
 			return tok, err
 		}
 		tok.tokenTable[i] = string(tokenBytes)
-		tok.lookupTable[string(tokenBytes)] = int32(i)
+		tok.trie.Insert(tokenBytes, int32(i))
 	}
 	return tok, nil
 }
@@ -65,81 +72,72 @@ func (t Tokenizer) Decode(tokens []int32) (string, error) {
 }
 
 func (t Tokenizer) Encode(text string) ([]int32, error) {
-	trie := NewTrie()
-	for _, token := range t.tokenTable {
-		trie.Insert(token)
-	}
-	tokensStrings, tokenIDs := []string{}, []int32{}
-	currentToken := ""
-	for _, s := range text {
-		if !trie.StartsWith(currentToken + string(s)) {
-			tokensStrings = append(tokensStrings, currentToken)
-			currentToken = string(s)
-		} else {
-			currentToken += string(s)
-		}
-	}
-	if currentToken != "" {
-		tokensStrings = append(tokensStrings, currentToken)
-	}
-	for _, str := range tokensStrings {
-		val, ok := t.lookupTable[str]
-		if !ok {
-			continue
-			panic(fmt.Sprintf("token not found: %s", str))
-		}
-		tokenIDs = append(tokenIDs, val)
-	}
-	return tokenIDs, nil
+	_, tokens := t.trie.Tokenize([]byte(text))
+	return tokens, nil
 }
 
-type Trie struct {
-	children map[string]*Trie
+type trie struct {
+	children map[byte]*trie
+	data     int32
 	end      bool
+	key      byte
 }
 
-func NewTrie() Trie {
-	return Trie{
-		children: map[string]*Trie{},
+func newTrie(data []string) trie {
+	t := trie{
+		children: map[byte]*trie{},
 		end:      false,
 	}
+	for i, word := range data {
+		t.Insert([]byte(word), int32(i))
+	}
+	return t
 }
 
-func (this *Trie) Insert(word string) {
-	cur := this
+func (t *trie) Insert(word []byte, data int32) error {
+	cur := t
+	if len(word) == 0 {
+		return errors.New("zero length word not supported")
+	}
+	var index byte
 	for i := 0; i < len(word); i++ {
-		index := word[i]
-		if cur.children[string(index)] == nil {
-			cur.children[string(index)] = &Trie{
-				children: map[string]*Trie{},
+		index = word[i] // 00: 0
+		if cur.children[index] == nil {
+			cur.children[index] = &trie{
+				children: map[byte]*trie{},
 			}
 		}
-		cur = cur.children[string(index)]
+		cur = cur.children[index]
 	}
 	cur.end = true
+	cur.data = data
+	cur.key = index
+	return nil
 }
 
-func (this *Trie) Search(word string) bool {
-	cur := this
-	for i := 0; i < len(word); i++ {
-		index := word[i] - 'a'
-		if cur.children[string(index)] == nil {
-			return false
+func (t *trie) Tokenize(input []byte) ([][]byte, []int32) {
+	var cur = t
+	var token = GPT2_EOT
+	endIdx, next := 1, 0
+	split, tokens := make([][]byte, 0), make([]int32, 0)
+	for len(input) != 0 {
+		switch {
+		case next == len(input), cur.children[input[next]] == nil:
+			split = append(split, input[:endIdx])
+			tokens = append(tokens, token)
+			input = input[endIdx:]
+			token = GPT2_EOT
+			cur = t
+			next = 0
+			endIdx = 1
+		default:
+			cur = cur.children[input[next]]
+			next += 1
+			if cur.end {
+				endIdx = next
+				token = cur.data
+			}
 		}
-		cur = cur.children[string(index)]
 	}
-
-	return cur.end
-}
-
-func (this *Trie) StartsWith(prefix string) bool {
-	cur := this
-	for i := 0; i < len(prefix); i++ {
-		index := prefix[i]
-		if cur.children[string(index)] == nil {
-			return false
-		}
-		cur = cur.children[string(index)]
-	}
-	return true
+	return split, tokens
 }

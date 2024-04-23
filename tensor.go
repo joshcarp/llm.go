@@ -90,6 +90,16 @@ type ParameterTensors struct {
 	LayerFinNormB tensor // (C) - Final layer normalization biases
 }
 
+func newParameterTensors(V, C, maxSeqLen, L int) ParameterTensors {
+	var tensor ParameterTensors
+	tensor.Init(V, C, maxSeqLen, L)
+	return tensor
+}
+
+func (tensor *ParameterTensors) Len() int {
+	return len(tensor.Memory)
+}
+
 // Init initialises the ParameterTensors with specific sizes for each tensor based on the model architecture.
 func (tensor *ParameterTensors) Init(V, C, maxSeqLen, L int) {
 	tensor.Memory = make([]float32,
