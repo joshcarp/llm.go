@@ -15,7 +15,7 @@ func main() {
 	done := make(chan struct{}, 0)
 	js.Global().Set("chat", js.FuncOf(chat))
 	var err error
-	model, err = llmgo.LoadGPT2Model("./data/gpt2_124M.bin", "./data/gpt2_tokenizer.bin")
+	model, err = llmgo.LoadGPT2Model("https://huggingface.co/joshcarp/llm.go/raw/main/gpt2_124M.bin", "https://huggingface.co/joshcarp/llm.go/raw/main/gpt2_tokenizer.bin")
 	fmt.Println(err)
 	<-done
 }
