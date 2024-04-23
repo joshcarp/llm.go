@@ -5,6 +5,11 @@ type tensor struct {
 	dims []int
 }
 
+// TODO: make this better
+func (t tensor) Data() []float32 {
+	return t.data
+}
+
 func newTensor(data []float32, dims ...int) (tensor, int) {
 	s := 1
 	for _, d := range dims {
@@ -85,8 +90,8 @@ type ParameterTensors struct {
 	LayerFinNormB tensor // (C) - Final layer normalization biases
 }
 
-// init initialises the ParameterTensors with specific sizes for each tensor based on the model architecture.
-func (tensor *ParameterTensors) init(V, C, maxSeqLen, L int) {
+// Init initialises the ParameterTensors with specific sizes for each tensor based on the model architecture.
+func (tensor *ParameterTensors) Init(V, C, maxSeqLen, L int) {
 	tensor.Memory = make([]float32,
 		V*C+ // WordTokEmbed
 			maxSeqLen*C+ // WordPosEmbed
@@ -172,7 +177,7 @@ type ActivationTensors struct {
 	Losses             tensor // (B, T) - Loss values per token in the batch
 }
 
-func (tensor *ActivationTensors) init(B, C, T, L, NH, V int) {
+func (tensor *ActivationTensors) Init(B, C, T, L, NH, V int) {
 	tensor.Memory = make([]float32,
 		B*T*C+
 			L*B*T*C+

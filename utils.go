@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-func checkTensor(tensorA, tensorB []float32, label string) bool {
+func CheckTensor(tensorA, tensorB []float32, label string) bool {
 	printUpto, failedPrint := 5, 2
 	ok := true
 	fmt.Println(label)
@@ -41,38 +41,38 @@ func checkTensor(tensorA, tensorB []float32, label string) bool {
 	return ok
 }
 
-func checkParameters(got, want ParameterTensors) bool {
+func CheckParameters(got, want ParameterTensors) bool {
 	ok, allok := true, true
-	ok = checkTensor(got.WordTokEmbed.data, want.WordTokEmbed.data, "dwte")
+	ok = CheckTensor(got.WordTokEmbed.data, want.WordTokEmbed.data, "dwte")
 	allok = allok && ok
-	ok = checkTensor(got.WordPosEmbed.data, want.WordPosEmbed.data, "dwpe")
+	ok = CheckTensor(got.WordPosEmbed.data, want.WordPosEmbed.data, "dwpe")
 	allok = allok && ok
-	ok = checkTensor(got.LayerNorm1W.data, want.LayerNorm1W.data, "dln1w")
+	ok = CheckTensor(got.LayerNorm1W.data, want.LayerNorm1W.data, "dln1w")
 	allok = allok && ok
-	ok = checkTensor(got.LayerNorm1B.data, want.LayerNorm1B.data, "dln1b")
+	ok = CheckTensor(got.LayerNorm1B.data, want.LayerNorm1B.data, "dln1b")
 	allok = allok && ok
-	ok = checkTensor(got.QueryKeyValW.data, want.QueryKeyValW.data, "dqkvw")
+	ok = CheckTensor(got.QueryKeyValW.data, want.QueryKeyValW.data, "dqkvw")
 	allok = allok && ok
-	ok = checkTensor(got.QueryKeyValB.data, want.QueryKeyValB.data, "dqkvb")
+	ok = CheckTensor(got.QueryKeyValB.data, want.QueryKeyValB.data, "dqkvb")
 	allok = allok && ok
-	ok = checkTensor(got.AttProjW.data, want.AttProjW.data, "dattprojw")
+	ok = CheckTensor(got.AttProjW.data, want.AttProjW.data, "dattprojw")
 	allok = allok && ok
-	ok = checkTensor(got.AttProjB.data, want.AttProjB.data, "dattprojb")
+	ok = CheckTensor(got.AttProjB.data, want.AttProjB.data, "dattprojb")
 	allok = allok && ok
-	ok = checkTensor(got.Layer2NormW.data, want.Layer2NormW.data, "dln2w")
+	ok = CheckTensor(got.Layer2NormW.data, want.Layer2NormW.data, "dln2w")
 	allok = allok && ok
-	ok = checkTensor(got.Layer2NormB.data, want.Layer2NormB.data, "dln2b")
+	ok = CheckTensor(got.Layer2NormB.data, want.Layer2NormB.data, "dln2b")
 	allok = allok && ok
-	ok = checkTensor(got.FeedFwdW.data, want.FeedFwdW.data, "dfcw")
+	ok = CheckTensor(got.FeedFwdW.data, want.FeedFwdW.data, "dfcw")
 	allok = allok && ok
-	ok = checkTensor(got.FeedFwdB.data, want.FeedFwdB.data, "dfcb")
+	ok = CheckTensor(got.FeedFwdB.data, want.FeedFwdB.data, "dfcb")
 	allok = allok && ok
-	ok = checkTensor(got.FeedFwdProjW.data, want.FeedFwdProjW.data, "dfcprojw")
+	ok = CheckTensor(got.FeedFwdProjW.data, want.FeedFwdProjW.data, "dfcprojw")
 	allok = allok && ok
-	ok = checkTensor(got.FeedFwdProjB.data, want.FeedFwdProjB.data, "dfcprojb")
+	ok = CheckTensor(got.FeedFwdProjB.data, want.FeedFwdProjB.data, "dfcprojb")
 	allok = allok && ok
-	ok = checkTensor(got.LayerFinNormW.data, want.LayerFinNormW.data, "dlnfw")
+	ok = CheckTensor(got.LayerFinNormW.data, want.LayerFinNormW.data, "dlnfw")
 	allok = allok && ok
-	ok = checkTensor(got.LayerFinNormB.data, want.LayerFinNormB.data, "dlnfb")
+	ok = CheckTensor(got.LayerFinNormB.data, want.LayerFinNormB.data, "dlnfb")
 	return ok && allok
 }
