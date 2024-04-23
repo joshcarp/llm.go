@@ -49,20 +49,6 @@ func newDataLoader(file io.Reader, batchSize, seqLength int) (*DataLoader, error
 	}
 	return loader, nil
 }
-func newDataLoaderFromInts(data []int32, batchSize, seqLength int) (*DataLoader, error) {
-	size := len(data)
-	if size < (batchSize*seqLength + 1) {
-		return nil, errors.New("error: file size is too small for the batch size and sequence length")
-	}
-	loader := &DataLoader{
-		batchSize:  batchSize,
-		seqLength:  seqLength,
-		NumBatches: size / (batchSize * seqLength),
-		data:       data,
-		fileSize:   int64(size),
-	}
-	return loader, nil
-}
 
 func (loader *DataLoader) Reset() {
 	loader.currentPosition = 0

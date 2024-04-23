@@ -33,22 +33,29 @@ func encoderForward(out []float32, inp []int32, wte []float32, wpe []float32, B,
 }
 
 // encoderBackward calculates gradients during backpropagation
-// dwte: gradients with respect to wte
-// dwpe: gradients with respect to wpe
-// dout: the gradient to apply to dwte and dwpe
+// Parameters:
+//   - dwte: gradients with respect to word embeddings (wte)
+//   - dwpe: gradients with respect to positional embeddings (wpe)
+//   - dout: the gradient to apply to dwte and dwpe
+//   - inp: input tokens (ids that refer to indexes within wte)
+//   - B: batch size
+//   - T: sequence length (number of time steps)
+//   - C: embedding dimension (number of features)
 func encoderBackward(dwte, dwpe []float32, dout []float32, inp []int32, B, T, C int) {
+	// Iterate over the batch and time steps
 	for b := 0; b < B; b++ {
 		for t := 0; t < T; t++ {
-			// Calculate offsets
+			// Calculate offsets for indexing
 			doutBTOffset := b*T*C + t*C
-			ix := inp[b*T+t] // inp tokens are ids that refer to indexes within wte
-			dwteIxOffset := ix * int32(C)
-			dwpeTOffset := t * C
+			ix := inp[b*T+t]              // Get the input token id
+			dwteIxOffset := ix * int32(C) // Calculate the offset for dwte
+			dwpeTOffset := t * C          // Calculate the offset for dwpe
 
-			// Iterate over the dimension and apply computations
+			// Iterate over the embedding dimension and apply computations
 			for i := 0; i < C; i++ {
-				// d is the diff that gets applied to dwte and dwpe
+				// Get the gradient value from dout
 				d := dout[doutBTOffset+i]
+				// Update the gradients for word embeddings (dwte) and positional embeddings (dwpe)
 				dwte[dwteIxOffset+int32(i)] += d
 				dwpe[dwpeTOffset+i] += d
 			}
@@ -56,15 +63,21 @@ func encoderBackward(dwte, dwpe []float32, dout []float32, inp []int32, B, T, C 
 	}
 }
 
-// layernormForward normalises the activations in each layer.
-// It improves convergence in training and reduces sensitivity to initial parameters
-// for each vector the mean and variance is calculated
-// reference: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
+// layernormForward normalizes the activations in each layer.
+// It improves convergence in training and reduces sensitivity to initial parameters.
+// For each vector, the mean and variance are calculated.
+// Reference: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
 // Paper: https://arxiv.org/abs/1607.06450
-// both inp and out are (B,T,C) of the activations
-// mean and rstd are (B,T) buffers, to be used later in backward pass
-// at each position (b,t) of the input, the C-dimensional vector
-// of activations gets normalized, then scaled and shifted
+// Parameters:
+//   - out: output activations (B,T,C)
+//   - mean: mean values (B,T) for each position (b,t)
+//   - rstd: reciprocal standard deviations (B,T) for each position (b,t)
+//   - inp: input activations (B,T,C)
+//   - weight: learnable weight (C) for scaling
+//   - bias: learnable bias (C) for shifting
+//   - B: batch size
+//   - T: sequence length (number of time steps)
+//   - C: embedding dimension (number of features)
 func layernormForward(out, mean, rstd, inp, weight, bias []float32, B, T, C int) {
 	var eps float32 = 1e-5
 	for b := 0; b < B; b++ {
@@ -143,8 +156,16 @@ func layernormBackward(dinp, dweight, dbias, dout, inp, weight, mean, rstd []flo
 	}
 }
 
-// `bias` is the bias slice (size: OC).
-// `B` is the batch size, `T` is the sequence length, `C` is the input dimension, and `OC` is the number of output channels.
+// matmulForward performs matrix multiplication and adds bias.
+// Parameters:
+//   - out: output matrix
+//   - inp: input matrix
+//   - weight: weight matrix
+//   - bias: bias vector
+//   - B: batch size
+//   - T: sequence length (number of time steps)
+//   - C: input dimension (number of features)
+//   - OC: number of output channels
 func matmulForward(out, inp, weight, bias []float32, B, T, C, OC int) {
 	// Iterate over each batch
 	var wg sync.WaitGroup
@@ -178,7 +199,6 @@ func matmulForward(out, inp, weight, bias []float32, B, T, C, OC int) {
 }
 
 func matmulBackward(dinp, dweight, dbias, dout, inp, weight []float32, B, T, C, OC int) {
-	// Backward into inp first, parallelize over B,T
 	var wg sync.WaitGroup
 	for b := 0; b < B; b++ {
 		for t := 0; t < T; t++ {
@@ -198,7 +218,6 @@ func matmulBackward(dinp, dweight, dbias, dout, inp, weight []float32, B, T, C, 
 		}
 	}
 	wg.Wait()
-	// Backward into weight/bias, parallelize over output channels OC
 	for o := 0; o < OC; o++ {
 		wg.Add(1)
 		go func(o int) {
@@ -223,15 +242,20 @@ func matmulBackward(dinp, dweight, dbias, dout, inp, weight []float32, B, T, C, 
 }
 
 // attentionForward performs the attention forward pass.
-/*
-	input is (B, T, 3C) holding the query, key, value (Q, K, V) vectors
-	preatt, att are (B, NH, T, T). NH = number of heads, T = sequence length
-	that holds the pre-attention and post-attention scores (used in backward)
-	output is (B, T, C)
-	attention is the only layer that mixes information across time
-	every other operation is applied at every (b,t) position independently
-	(and of course, no layer mixes information across batch)
-*/
+//
+//	attention is the only layer that mixes information across time
+//	every other operation is applied at every (b,t) position independently
+//	(and of course, no layer mixes information across batch)
+//
+// Parameters:
+//   - out: output matrix (B,T,C)
+//   - preatt: pre-attention scores (B,NH,T,T)
+//   - att: post-attention scores (B,NH,T,T)
+//   - inp: input matrix (B,T,3C) holding Query, Key, Value vectors
+//   - B: batch size
+//   - T: sequence length (number of time steps)
+//   - C: input dimension (number of features)
+//   - NH: number of attention heads
 func attentionForward(out, preatt, att, inp []float32, B, T, C, NH int) {
 	C3 := C * 3  // This is the dimensions for the key, query and values
 	hs := C / NH // head size
