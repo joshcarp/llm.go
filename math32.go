@@ -17,8 +17,16 @@ func Exp(x float32) float32 {
 	return float32(math.Exp(float64(x)))
 }
 
+func Inf(sign int) float32 {
+	return float32(math.Inf(sign))
+}
+
 func Log(x float32) float32 {
 	return float32(math.Log(float64(x)))
+}
+
+func IsNaN(f float32) bool {
+	return math.IsNaN(float64(f))
 }
 
 func Pow(x, y float32) float32 {

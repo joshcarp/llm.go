@@ -181,16 +181,16 @@ func matmulForward(out, inp, weight, bias []float32, B, T, C, OC int) {
 				for o := 0; o < OC; o++ {
 					var val float32
 					if bias != nil {
-						val = float32(bias[o])
+						val = bias[o]
 					}
 					// Calculate the index in the weight slice
 					wrow := weight[o*C:]
 					// Perform the dot product between the input and weight row
 					for i := 0; i < C; i++ {
-						val += float32(inp_bt[i]) * float32(wrow[i])
+						val += inp_bt[i] * wrow[i]
 					}
 					// Store the output value in the output slice
-					out_bt[o] = float32(val)
+					out_bt[o] = val
 				}
 			}(b, t)
 		}
@@ -466,12 +466,12 @@ func softmaxForward(probs, logits []float32, B, T, V int) {
 				// Calculate exponentials and sum
 				var sum float32
 				for i := 0; i < V; i++ {
-					probsBT[i] = float32(Exp((logitsBT[i] - maxval)))
-					sum += float32(probsBT[i]) // Using float32 for potential precision gain
+					probsBT[i] = Exp((logitsBT[i] - maxval))
+					sum += probsBT[i] // Using float32 for potential precision gain
 				}
 				// Normalize
 				for i := 0; i < V; i++ {
-					probsBT[i] /= float32(sum)
+					probsBT[i] /= sum
 				}
 			}(b, t)
 		}
@@ -492,7 +492,7 @@ func crossEntropyForward(losses []float32, probs []float32, targets []int32, B, 
 			// Calculate the cross-entropy loss
 			prob := probs[startIndex+ix]
 			// Calculate the negative log of the probability for the correct target index
-			losses[b*T+t] = float32(-Log((prob)))
+			losses[b*T+t] = -Log((prob))
 		}
 	}
 }
