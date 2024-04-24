@@ -407,11 +407,11 @@ func (model *GPT2) Inference(input string, B, T int) (string, error) {
 	}
 	fmt.Printf("input is %d tokens long\n", len(tokens))
 	model.Forward(tokens, tokens[1:], B, T)
-	genTokens := make([]int32, model.Config.MaxSeqLen)
+	genTokens := make([]int32, B*T)
 	for i := 0; i < B*T; i++ {
 		genTokens[i] = model.Config.EOT
 	}
-	for t := 1; t < model.Config.MaxSeqLen; t++ {
+	for t := 1; t < B*T; t++ {
 		fmt.Printf("generating token: %d\n", t)
 		// for each t, we re-compute all activations between 0 and t
 		// leaving this alone because you want separate code for inference anyway

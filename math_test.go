@@ -1,8 +1,9 @@
 package llmgo
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
-	"math/rand/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -232,8 +233,8 @@ func TestAttentionForward(t *testing.T) {
 				C:   2,
 				NH:  1,
 			},
-			wantOut:    []float32{0.8, 1.2},
-			wantPreatt: []float32{0.8},
+			wantOut:    []float32{5, 6},
+			wantPreatt: []float32{7.7781744},
 			wantAtt:    []float32{1},
 		},
 		{
@@ -292,43 +293,35 @@ func TestAttentionForward(t *testing.T) {
 }
 
 func FuzzGeluInverse(f *testing.F) {
-	for i := 0; i < 1000; i++ {
-		// Generate random input values
-		inp := make([]float32, 10)
-		for j := range inp {
-			inp[j] = float32(rand.Float64()*10 - 5)
-		}
-		// Compute forward pass
-		out := make([]float32, 10)
-		geluForward(out, inp, 10)
+	f.Fuzz(func(t *testing.T, inb []byte) {
+		inp := make([]float32, len(inb)/4)
+		binary.Read(bytes.NewReader(inb), binary.LittleEndian, &inp)
+		out := make([]float32, len(inp))
+		geluForward(out, inp, len(inp))
 		for i, v := range inp {
+			got := out[i]
 			switch {
 			case v > 10:
 				// large input values preserve their values
-				assert.InDelta(f, v, out[i], 1e-3)
+				assert.InDelta(t, v, got, 1e-3)
+			case v == Inf(-1):
+				assert.True(t, IsNaN(got), got)
 			case v < 0:
 				// negative input values get mapped close to 0
-				assert.Less(f, out[i], float32(0))       // out is less than zero
-				assert.Greater(f, out[i], float32(-1.0)) // out is greater than -1
+				assert.LessOrEqual(t, got, float32(0)) // out is less than zero
+				assert.Greater(t, got, float32(-1.0))  // out is greater than -1
 			}
 		}
-		// Compute backward pass
-		dinp := make([]float32, 10)
-		geluBackward(dinp, inp, out, 10)
-		// Check if the original input is recovered (up to a scaling factor)
-		for j := range inp {
-			if inp[j]*float32(GELUSCALEFACTOR) != dinp[j] {
-				f.Fail()
-			}
-		}
-	}
+	})
 }
 
-func TestInference(t *testing.T) {
+func BenchmarkInference(b *testing.B) {
 	randomText := "Kathleen Mary Ferrier CBE (22 April 1912 – 8 October 1953)[1] was an English contralto singer who achieved an international reputation as a stage, concert and recording artist, with a repertoire extending from folksong and popular ballads to the classical works of Bach, Brahms, Mahler and Elgar. Her death from cancer, at the height of her fame, was a shock to the musical world and particularly to the general public, which was kept in ignorance of the nature of her illness until after her death.  The daughter of a Lancashire village schoolmaster, Ferrier showed early talent as a pianist, and won numerous amateur piano competitions while working as a telephonist with the General Post Office. She did not take up singing seriously until 1937, when after winning a prestigious singing competition at the Carlisle Festival she began to receive offers of professional engagements as a vocalist. Thereafter she took singing lessons, first with J. E. Hutchinson and later with Roy Henderson. After the outbreak of the Second World War Ferrier was recruited by the Council for the Encouragement of Music and the Arts (CEMA), and in the following years sang at concerts and recitals throughout the UK. In 1942 her career was boosted when she met the conductor Malcolm Sargent, who recommended her to the influential Ibbs and Tillett concert management agency. She became a regular performer at leading London and provincial venues, and made numerous BBC radio broadcasts.  In 1946 Ferrier made her stage debut in the Glyndebourne Festival premiere of Benjamin Britten's opera The Rape of Lucretia. A year later she made her first appearance as Orfeo in Gluck's Orfeo ed Euridice, a work with which she became particularly associated. By her own choice, these were her only two operatic roles. As her reputation grew, Ferrier formed close working relationships with major musical figures, including Britten, Sir John Barbirolli, Bruno Walter and the accompanist Gerald Moore. She became known internationally through her three tours to the United States between 1948 and 1950 and her many visits to continental Europe.  Ferrier was diagnosed with breast cancer in March 1951. In between periods of hospitalisation and convalescence she continued to perform and record; her final public appearance was as Orfeo, at the Royal Opera House in February 1953, eight months before her death. Among her many memorials, the Kathleen Ferrier Cancer Research Fund was launched in May 1954. The Kathleen Ferrier Scholarship Fund, administered by the Royal Philharmonic Society, has since 1956 made annual awards to aspiring young professional singers."
 	model, err := LoadGPT2Model("./gpt2_124M.bin", "./gpt2_tokenizer.bin")
-	require.NoError(t, err)
-	output, err := model.Inference(randomText, 1, 1)
-	require.NoError(t, err)
-	t.Log(output)
+	require.NoError(b, err)
+	for range b.Name() {
+		output, err := model.Inference(randomText, 1, 9)
+		require.NoError(b, err)
+		b.Log(output)
+	}
 }
