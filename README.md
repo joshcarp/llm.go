@@ -34,7 +34,7 @@ make test
 This will run `go run ./cmd/testgpt2/main.go`
 
 # TODO
-- [x] Tokenize input text (Needed for WASM)
+- [ ] Tokenize input text, the implementation of this is incorrect. Need to do pair matching not tries
 - [ ] Very slow, need to improve performance.
 - [ ] It runs in WASM but using WebGPU bindings might be fun.
 - [ ] More refactoring.
