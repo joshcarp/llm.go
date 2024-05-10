@@ -1,6 +1,3 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
 package llmgo
 
 import (
@@ -19,28 +16,17 @@ var err error
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "llmgo",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Short: "CLI tool to interface with GPT-2 model",
+	Long: `
+		This CLI tool provides a direct interface to the GPT-2 model, allowing users to generate text, train new models, and fine-tune existing models directly from the command line. It is designed for both developers and researchers interested in exploring the capabilities of GPT-2 without the need for complex programming environments.
+	`,
 }
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Run GPT inference",
+	Long:  `This command initiates the GPT inference process. It allows users to input text and receive generated continuations based on the selected model. This feature is particularly useful for generating text, experimenting with AI-driven content creation, and more.`,
 	// Run: func(cmd *cobra.Command, args []string) {
 	// 	fmt.Println("run called")
 	// },
@@ -49,13 +35,8 @@ to quickly create a Cobra application.`,
 // gpt2Cmd represents the gpt2 command
 var gpt2Cmd = &cobra.Command{
 	Use:   "gpt2",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Run GPT-2 inference",
+	Long:  `This command specifically initiates the GPT-2 inference process. It allows users to input text and receive AI-generated text continuations based on the GPT-2 model.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		for {
 			fmt.Printf(">>> ")
@@ -65,7 +46,7 @@ to quickly create a Cobra application.`,
 			if err != nil {
 				if err == io.EOF {
 					fmt.Println("\nExiting command. Thanks for using llmgo!")
-					os.Exit(0)
+					break
 				}
 				fmt.Println("Failed to read input:", err)
 				continue
