@@ -1,0 +1,21 @@
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100.01131621190234 134.85251339265506" width="200.02263242380468" height="269.7050267853101">
+  <!-- svg-source:excalidraw -->
+  
+  <defs>
+    <style class="style-fonts">
+      @font-face {
+        font-family: "Virgil";
+        src: url("https://excalidraw.com/Virgil.woff2");
+      }
+      @font-face {
+        font-family: "Cascadia";
+        src: url("https://excalidraw.com/Cascadia.woff2");
+      }
+      @font-face {
+        font-family: "Assistant";
+        src: url("https://excalidraw.com/Assistant-Regular.woff2");
+      }
+    </style>
+    
+  </defs>
+  <rect x="0" y="0" width="100.01131621190234" height="134.85251339265506" fill="#ffffff"></rect><g transform="translate(10 10) rotate(0 38.937225341796875 7.825403731796541)"><text x="38.937225341796875" y="12.52091177942533" font-family="Helvetica, Segoe UI Emoji" font-size="13.609397794428977px" fill="#1e1e1e" text-anchor="middle" style="white-space: pre;" direction="ltr" dominant-baseline="alphabetic">Input context</text></g><g stroke-linecap="round"><g transform="translate(50.40001268998185 82.51912740393527) rotate(0 0 10.767214242026057)"><path d="M0 0 C0 5.33, 0 10.65, 0 21.53 M0 0 C0 8.48, 0 16.97, 0 21.53" stroke="#1e1e1e" stroke-width="2" fill="none"></path></g></g><mask></mask><g stroke-linecap="round"><g transform="translate(48.48753813739768 98.52181197562822) rotate(0 1.059535393282431 2.757208822508801)"><path d="M0 0 C0.49 1.28, 0.99 2.57, 2.12 5.51 M0 0 C0.7 1.82, 1.4 3.63, 2.12 5.51" stroke="#1e1e1e" stroke-width="2" fill="none"></path></g></g><mask></mask><g stroke-linecap="round"><g transform="translate(50.62907512746824 104.15501276834948) rotate(0 0.9141717410632282 -2.9088855668724136)"><path d="M0 0 C0.57 -1.8, 1.13 -3.6, 1.83 -5.82 M0 0 C0.47 -1.49, 0.93 -2.97, 1.83 -5.82" stroke="#1e1e1e" stroke-width="2" fill="none"></path></g></g><mask></mask><g stroke-linecap="round" transform="translate(10.721766985391696 52.84193015485471) rotate(0 39.64477461325532 14.143613157191794)"><path d="M0 0 L79.29 0 L79.29 28.29 L0 28.29" stroke="none" stroke-width="0" fill="#a5d8ff"></path><path d="M0 0 C27.47 0, 54.93 0, 79.29 0 M0 0 C21.6 0, 43.19 0, 79.29 0 M79.29 0 C79.29 8.78, 79.29 17.55, 79.29 28.29 M79.29 0 C79.29 5.79, 79.29 11.57, 79.29 28.29 M79.29 28.29 C61.05 28.29, 42.82 28.29, 0 28.29 M79.29 28.29 C54.14 28.29, 29 28.29, 0 28.29 M0 28.29 C0 21.51, 0 14.72, 0 0 M0 28.29 C0 17.45, 0 6.61, 0 0" stroke="#1e1e1e" stroke-width="2" fill="none"></path></g><g transform="translate(20.467129523165568 59.13537370042832) rotate(0 29.122649333049367 7.825403731796541)"><text x="29.12264933304931" y="12.52091177942533" font-family="Helvetica, Segoe UI Emoji" font-size="13.609397794428977px" fill="#1e1e1e" text-anchor="middle" style="white-space: pre;" direction="ltr" dominant-baseline="alphabetic">Tokenizer</text></g><g stroke-linecap="round"><g transform="translate(47.7805387426306 28.50994072494359) rotate(0 0 10.767214242026057)"><path d="M0 0 C0 8.36, 0 16.72, 0 21.53 M0 0 C0 5.93, 0 11.86, 0 21.53" stroke="#1e1e1e" stroke-width="2" fill="none"></path></g></g><mask></mask><g stroke-linecap="round"><g transform="translate(45.78401727084565 44.384548420748615) rotate(0 1.059535393282431 2.757208822508801)"><path d="M0 0 C0.49 1.27, 0.98 2.54, 2.12 5.51 M0 0 C0.57 1.48, 1.14 2.96, 2.12 5.51" stroke="#1e1e1e" stroke-width="2" fill="none"></path></g></g><mask></mask><g stroke-linecap="round"><g transform="translate(47.925554260917124 50.01774921347533) rotate(0 0.9141717410632282 -2.9088855668724136)"><path d="M0 0 C0.43 -1.36, 0.85 -2.71, 1.83 -5.82 M0 0 C0.44 -1.41, 0.89 -2.83, 1.83 -5.82" stroke="#1e1e1e" stroke-width="2" fill="none"></path></g></g><mask></mask><g transform="translate(30.576532055349617 109.20170592906197) rotate(0 20.03472900390625 7.825403731796541)"><text x="20.03472900390625" y="12.52091177942533" font-family="Helvetica, Segoe UI Emoji" font-size="13.609397794428977px" fill="#1e1e1e" text-anchor="middle" style="white-space: pre;" direction="ltr" dominant-baseline="alphabetic">tokens</text></g></svg>
