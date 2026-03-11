@@ -55,6 +55,13 @@ func main() {
 	fmt.Printf("batch_size: %d\n", B)
 	fmt.Printf("seq_len: %d\n", T)
 	fmt.Printf("num_activations: %d\n", len(model.Acts.Memory))
+
+	outp, err := model.Inference("Where is the next  ")
+	if err != nil {
+		panic(err)
+	}
+	print(outp)
+	return
 	allok := true
 	var losses []float32
 	for step := 0; step < 10; step++ {

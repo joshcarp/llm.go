@@ -390,13 +390,14 @@ func (model *GPT2) Update(learningRate, beta1, beta2, eps, weightDecay float32, 
 	}
 }
 
-func (model *GPT2) Inference(input string, B, T int) (string, error) {
-	//B, T := 1, 16
+func (model *GPT2) Inference(input string) (string, error) {
+	B, T, nTokens := 1, 64, 20
 	start := time.Now()
 	defer func() {
 		fmt.Printf("inference time took: %v\n", time.Now().Sub(start))
 	}()
 	tokens, err := model.Tokenizer.Encode(input)
+	//prompt_len := len(tokens)
 	if err != nil {
 		return "", err
 	}
@@ -407,23 +408,21 @@ func (model *GPT2) Inference(input string, B, T int) (string, error) {
 	}
 	fmt.Printf("input is %d tokens long\n", len(tokens))
 	model.Forward(tokens, tokens[1:], B, T)
-	genTokens := make([]int32, B*T)
-	for i := 0; i < B*T; i++ {
-		genTokens[i] = model.Config.EOT
-	}
-	for t := 1; t < B*T; t++ {
-		fmt.Printf("generating token: %d\n", t)
+	for t := 1; t < nTokens; t++ {
 		// for each t, we re-compute all activations between 0 and t
 		// leaving this alone because you want separate code for inference anyway
 		// the inference here is just for sanity checking purposes
-		model.Forward(genTokens, nil, B, t)
+		model.Forward(tokens, nil, B, t)
 		probabilities := model.Acts.Probabilities.data[(t-1)*model.Config.V:]
 		coin := model.Rand.Float32()
 		nextToken2 := sampleMult(probabilities, coin)
-		genTokens[t] = rune(nextToken2)
-	}
-	if model.Tokenizer.init {
-		return model.Tokenizer.Decode(genTokens)
+		tokens[t] = rune(nextToken2)
+		out, err := model.Tokenizer.Decode([]int32{tokens[t]})
+		if err != nil {
+			panic(err)
+		}
+		fmt.Print(out)
+
 	}
 	return "", errors.New("tokenizer not initialised")
 }
